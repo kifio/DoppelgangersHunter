@@ -22,8 +22,16 @@ struct DoppelgangersHunter: ParsableCommand {
             return
         }
 
-        url.traverse(skipsHiddenFiles: skipsHiddenFiles).forEach { url in
-            print(url)
+        url.traverse(skipsHiddenFiles: skipsHiddenFiles)
+        .compactMap { path in
+            guard let content = FileManager.default.contents(atPath: path) else {
+                return nil
+            }
+
+            return (path, content)
+        }
+        .forEach { (path: String, content: Data) in
+            print("Хэш файла \(path) = \(content.hashValue)")
         }
     }
 }
