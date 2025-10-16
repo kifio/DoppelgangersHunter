@@ -13,6 +13,7 @@ private func testTraverse(skipsHiddenFiles: Bool) {
         .compactMap { FileManager.default.contents(atPath: $0) }
 
     let traverseResults = URL(string: ".")!.traverse(skipsHiddenFiles: true)
+        .paths
         .compactMap { FileManager.default.contents(atPath: $0) }
 
     #expect(Set(findResults) == Set(traverseResults))
