@@ -1,12 +1,6 @@
-// The Swift Programming Language
-// https://docs.swift.org/swift-book
-
-import ArgumentParser
 import Foundation
-import SQLite
 
-@main
-struct DoppelgangersHunter: AsyncParsableCommand {
+struct DoppelgangersHunter {
 
     typealias PathWithHash = (path: String, hash: Int64)
 
@@ -20,25 +14,10 @@ struct DoppelgangersHunter: AsyncParsableCommand {
         }
     }
 
-    @Argument(help: "Путь к каталогу, где надо найти дубликаты", completion: .directory)
-    var path: String
-
-    @Flag(help: "Автоматически удалять найденные дубликаты")
-    var delete: Bool = false
-
-    @Flag(help: "Пропускать скрытые файлы")
-    var skipsHiddenFiles: Bool = false
-
-    @Flag(name: .customLong("use-sqlite"), help: "Использовать SQLite базу данных")
-    var useSQLite: Bool = false
-
-    func run() async {
-        guard let url = URL(string: path) else {
-            print("Не удалось открыть каталог \(path)")
-            return
-        }
-
+    func hunt(url: URL, skipsHiddenFiles: Bool = false, useSQLite: Bool = false) async-> [Duplicates] {
         let traverseResult = url.traverse(skipsHiddenFiles: skipsHiddenFiles)
+        var duplicatesByHash: [Duplicates] = []
+
         print("Найдено файлов: \(traverseResult.paths.count)")
         _ = await withTaskGroup(of: PathWithHash?.self) { group in
             for path in traverseResult.paths {
@@ -51,7 +30,6 @@ struct DoppelgangersHunter: AsyncParsableCommand {
 
             var sqliteHashesTable: [String: Int64]? = useSQLite ? [:] : nil
             var inMemoryHashesTable: [Int64: String]? = useSQLite ? nil : [:]
-            var duplicatesByHash: [Duplicates] = []
 
             for await hashWithPath in group {
                 guard let path = hashWithPath?.path, let hash = hashWithPath?.hash else {
@@ -87,6 +65,8 @@ struct DoppelgangersHunter: AsyncParsableCommand {
                 }
             }
         }
+
+        return duplicatesByHash
     }
 
     private func handlePotentialDuplicate(
@@ -103,17 +83,8 @@ struct DoppelgangersHunter: AsyncParsableCommand {
             duplicatesByHash.append(duplicatesListInit())
         }
     }
-
-    // func batchDuplicates(duplicatesByHash: [Duplicates]) async {
-    //     _ = await withTaskGroup(of: [[(String, Data)]].self) { group in
-    //         for duplicates in duplicatesByHash {
-    //             group.addTask {
-    //                 duplicates.paths.batchDuplicates()
-    //             }
-    //         }
-    //     }
-    // }
 }
+
 
 private func computeHash(for path: String) async -> Int64? {
     guard let content = FileManager.default.contents(atPath: path) else {

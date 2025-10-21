@@ -10,39 +10,31 @@ import Testing
 
 private func testTraverse(skipsHiddenFiles: Bool) {
     let findResults = findFilesWithProcess(at: ".")
-        .compactMap { FileManager.default.contents(atPath: $0) }
+        .compactMap { contents(of: $0) }
 
     let traverseResults = URL(string: ".")!.traverse(skipsHiddenFiles: true)
         .paths
-        .compactMap { FileManager.default.contents(atPath: $0) }
+        .compactMap { contents(of: $0) }
 
     #expect(Set(findResults) == Set(traverseResults))
 }
 
-func findFilesWithProcess(at path: String = ".", skipsHiddenFiles: Bool = true) -> [String] {
-    let process = Process()
-    let pipe = Pipe()
+@Test func testDoppelgangersHunt() async {
+    let url = URL(string: ".")!
 
-    process.executableURL = URL(fileURLWithPath: "/usr/bin/find")
-    process.arguments = [path, "-type", "f"]
+    let findResults = findDuplicateFiles(at: ".")
+        .compactMap { contents(of: $0) }
 
-    if skipsHiddenFiles {
-        process.arguments!.append(contentsOf: ["!", "-path", "*/.*", "!", "-name", ".*"])
-    }
-
-    process.standardOutput = pipe
-
-    do {
-        try process.run()
-        process.waitUntilExit()
-
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        if let output = String(data: data, encoding: .utf8) {
-            return output.components(separatedBy: "\n").filter { !$0.isEmpty }
+    let doppelgangersHuntResults = await DoppelgangersHunter().hunt(url: url)
+        .reduce(into: [String]()) { result, element in
+            result.append(contentsOf: element.paths)
         }
-    } catch {
-        print("Ошибка при выполнении программы find: \(error)")
-    }
+        .compactMap { contents(of: $0) }
 
-    return []
+    #expect(Set(findResults) == Set(doppelgangersHuntResults))
+}
+
+@inlinable
+func contents(of path: String) -> Data? {
+    FileManager.default.contents(atPath: path)
 }
