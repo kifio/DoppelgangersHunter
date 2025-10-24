@@ -5,7 +5,7 @@
  - SQLite;
  - Swift for Linux;
  - Swift Testing;
- - а также файловой системой, инлайнами, мутирующими структурами и конкаренси.
+ - а также файловой системой, инлайнами, мутирующими структурами и вайб-кодингом.
 
 ```
 USAGE: doppelgangers-hunter <path> [--delete] [--skips-hidden-files] [--use-sqlite]
