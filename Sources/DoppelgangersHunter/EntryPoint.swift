@@ -26,19 +26,20 @@ struct EntryPoint: AsyncParsableCommand {
             return
         }
 
-        let duplicates = await DoppelgangersHunter().hunt(url: url, skipsHiddenFiles: skipsHiddenFiles, useSQLite: useSQLite)
+        let results = await DoppelgangersHunter().hunt(
+            url: url,
+            skipsHiddenFiles: skipsHiddenFiles,
+            useSQLite: useSQLite
+        )
 
-        for duplicate in duplicates {
-            print("Hash: \(duplicate.hash):")
-            for path in duplicate.paths {
+        results.enumerated().forEach { index, duplicates in
+            duplicates.paths.forEach { path in
                 print(path)
             }
-            print("------")
-        }
 
-        for duplicate in findDuplicateFiles(at: path) {
-            print(duplicate)
+            if index < results.count - 1 {
+                print()
+            }
         }
-
     }
 }

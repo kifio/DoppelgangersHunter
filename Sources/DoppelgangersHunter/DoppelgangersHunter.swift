@@ -4,21 +4,29 @@ struct DoppelgangersHunter {
 
     typealias PathWithHash = (path: String, hash: Int64)
 
-    class Duplicates: Decodable {
+    struct Duplicates: Decodable {
         let hash: Int64
-        var paths: [String]
+        private(set) var paths: [String]
 
         init(hash: Int64, paths: [String]) {
             self.hash = hash
             self.paths = paths
         }
+
+        mutating func append(path: String) {
+            self.paths.append(path)
+        }
+
+        mutating func remove(paths: Set<String>) {
+            self.paths.removeAll(where: { !paths.contains($0)})
+        }
     }
 
+    @discardableResult
     func hunt(url: URL, skipsHiddenFiles: Bool = false, useSQLite: Bool = false) async-> [Duplicates] {
         let traverseResult = url.traverse(skipsHiddenFiles: skipsHiddenFiles)
         var duplicatesByHash: [Duplicates] = []
 
-        print("Найдено файлов: \(traverseResult.paths.count)")
         _ = await withTaskGroup(of: PathWithHash?.self) { group in
             for path in traverseResult.paths {
                 group.addTask {
@@ -64,9 +72,46 @@ struct DoppelgangersHunter {
                     }
                 }
             }
+
+            _ = await withTaskGroup(of: (Int64, Set<String>).self) { group in
+                for duplicates in duplicatesByHash {
+                    group.addTask {
+                        await handleDuplicates((duplicates.hash, duplicates.paths))
+                    }
+                }
+
+                for await duplicatesPaths in group {
+                    if let potentialDuplicatesIndex = duplicatesByHash.firstIndex(where: { $0.hash == duplicatesPaths.0 }) {
+                        duplicatesByHash[potentialDuplicatesIndex].remove(paths: duplicatesPaths.1)
+                        if duplicatesByHash[potentialDuplicatesIndex].paths.isEmpty {
+                            duplicatesByHash.remove(at: potentialDuplicatesIndex)
+                        }
+                    }
+                }
+            }
         }
 
         return duplicatesByHash
+    }
+
+    private func handleDuplicates(
+        _ duplicatesByHash: (hash: Int64, paths: [String])
+    ) async -> (hash: Int64, paths: Set<String>){
+        var contents = [Data:String]()
+        var duplicatesPaths = Set<String>()
+
+        for path in duplicatesByHash.paths {
+            if let content = FileManager.default.contents(atPath: path) {
+                if let alreadyExistedPath = contents[content] {
+                    duplicatesPaths.insert(alreadyExistedPath)
+                    duplicatesPaths.insert(path)
+                } else {
+                    contents[content] = path
+                }
+            }
+        }
+
+        return (duplicatesByHash.hash, duplicatesPaths)
     }
 
     private func handlePotentialDuplicate(
@@ -75,16 +120,13 @@ struct DoppelgangersHunter {
         _ duplicatesByHash: inout [Duplicates],
         _ duplicatesListInit: () -> Duplicates
     ) {
-        if let potentialDuplicates = duplicatesByHash.first(where: { $0.hash == hash }) {
-            print("Добавить файл с хэшем : \(hash);")
-            potentialDuplicates.paths.append(path)
+        if let potentialDuplicatesIndex = duplicatesByHash.firstIndex(where: { $0.hash == hash }) {
+            duplicatesByHash[potentialDuplicatesIndex].append(path: path)
         } else {
-            print("Создать список файлов с хэшем: \(hash);")
             duplicatesByHash.append(duplicatesListInit())
         }
     }
 }
-
 
 private func computeHash(for path: String) async -> Int64? {
     guard let content = FileManager.default.contents(atPath: path) else {
@@ -135,7 +177,6 @@ extension URL {
                 }
                 return $0.path
             } ?? [String]()
-
         return (maxPathLength: maxPathLength, paths: paths)
     }
 }

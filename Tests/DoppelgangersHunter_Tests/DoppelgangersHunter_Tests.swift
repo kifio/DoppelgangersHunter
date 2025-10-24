@@ -3,35 +3,35 @@ import Testing
 
 @testable import DoppelgangersHunter
 
+@usableFromInline
+let url = URL(string: "TestData")!
+
 @Test func testTraverse() {
-    testTraverse(skipsHiddenFiles: true)
-    testTraverse(skipsHiddenFiles: false)
+    #expect(testTraverse(skipsHiddenFiles: true) == 9)
+    #expect(testTraverse(skipsHiddenFiles: false) == 11)
 }
 
-private func testTraverse(skipsHiddenFiles: Bool) {
-    let findResults = findFilesWithProcess(at: ".")
-        .compactMap { contents(of: $0) }
-
-    let traverseResults = URL(string: ".")!.traverse(skipsHiddenFiles: true)
-        .paths
-        .compactMap { contents(of: $0) }
-
-    #expect(Set(findResults) == Set(traverseResults))
+@inlinable
+func testTraverse(skipsHiddenFiles: Bool) -> Int {
+    url.traverse(skipsHiddenFiles: skipsHiddenFiles).paths.filter { !$0.contains("DS_Store") }.count
 }
 
 @Test func testDoppelgangersHunt() async {
-    let url = URL(string: ".")!
+    #expect(await testDoppelgangersHunt(useSQLite: false, skipsHiddenFiles: true) == 6)
+    #expect(await testDoppelgangersHunt(useSQLite: false, skipsHiddenFiles: false) == 8)
+}
 
-    let findResults = findDuplicateFiles(at: ".")
-        .compactMap { contents(of: $0) }
+@Test func testDoppelgangersHuntWithSQLite() async {
+    #expect(await testDoppelgangersHunt(useSQLite: true, skipsHiddenFiles: true) == 6)
+    #expect(await testDoppelgangersHunt(useSQLite: true, skipsHiddenFiles: false) == 8)
+}
 
-    let doppelgangersHuntResults = await DoppelgangersHunter().hunt(url: url)
+@inlinable
+func testDoppelgangersHunt(useSQLite: Bool, skipsHiddenFiles: Bool) async -> Int {
+    await DoppelgangersHunter().hunt(url: url, skipsHiddenFiles: skipsHiddenFiles, useSQLite: useSQLite)
         .reduce(into: [String]()) { result, element in
             result.append(contentsOf: element.paths)
-        }
-        .compactMap { contents(of: $0) }
-
-    #expect(Set(findResults) == Set(doppelgangersHuntResults))
+        }.count
 }
 
 @inlinable
