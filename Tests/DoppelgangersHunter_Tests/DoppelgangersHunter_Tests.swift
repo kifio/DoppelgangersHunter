@@ -28,7 +28,7 @@ func testTraverse(skipsHiddenFiles: Bool) -> Int {
 
 @inlinable
 func testDoppelgangersHunt(useSQLite: Bool, skipsHiddenFiles: Bool) async -> Int {
-    await DoppelgangersHunter().hunt(url: url, skipsHiddenFiles: skipsHiddenFiles, useSQLite: useSQLite)
+    await Hunt().hunt(url: url, skipsHiddenFiles: skipsHiddenFiles, useSQLite: useSQLite)
         .reduce(into: [String]()) { result, element in
             result.append(contentsOf: element.paths)
         }.count
