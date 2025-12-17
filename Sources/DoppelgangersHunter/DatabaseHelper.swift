@@ -1,3 +1,5 @@
+#if os(iOS)
+#else
 import Foundation
 import SQLite
 
@@ -70,3 +72,4 @@ struct DatabaseHelper {
         }
     }
 }
+#endif

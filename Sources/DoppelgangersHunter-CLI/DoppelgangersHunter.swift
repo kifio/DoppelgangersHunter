@@ -1,7 +1,9 @@
 // The Swift Programming Language
 // https://docs.swift.org/swift-book
-
+#if os(iOS)
+#else
 import ArgumentParser
+import DoppelgangersHunter
 import Foundation
 import SQLite
 
@@ -43,3 +45,4 @@ struct DoppelgangersHunter: AsyncParsableCommand {
         }
     }
 }
+#endif

@@ -1,14 +1,16 @@
+#if os(iOS)
+#else
 import Foundation
 
-struct Hunt {
+public struct Hunt {
+    
+    public init() {}
 
-    typealias PathWithHash = (path: String, hash: Int64)
-
-    struct Duplicates: Decodable {
+    public struct Duplicates: Decodable {
         let hash: Int64
-        private(set) var paths: [String]
+        private(set) public var paths: [String]
 
-        init(hash: Int64, paths: [String]) {
+        public init(hash: Int64, paths: [String]) {
             self.hash = hash
             self.paths = paths
         }
@@ -23,11 +25,11 @@ struct Hunt {
     }
 
     @discardableResult
-    func hunt(url: URL, skipsHiddenFiles: Bool = false, useSQLite: Bool = false) async-> [Duplicates] {
+    public func hunt(url: URL, skipsHiddenFiles: Bool = false, useSQLite: Bool = false) async-> [Duplicates] {
         let traverseResult = url.traverse(skipsHiddenFiles: skipsHiddenFiles)
         var duplicatesByHash: [Duplicates] = []
 
-        _ = await withTaskGroup(of: PathWithHash?.self) { group in
+        _ = await withTaskGroup(of: (path: String, hash: Int64)?.self) { group in
             for path in traverseResult.paths {
                 group.addTask {
                     return if let hash = await computeHash(for: path) {
@@ -75,8 +77,24 @@ struct Hunt {
 
             _ = await withTaskGroup(of: (Int64, Set<String>).self) { group in
                 for duplicates in duplicatesByHash {
+                    let paths = duplicates.paths
+                    let hash = duplicates.hash
                     group.addTask {
-                        await handleDuplicates((duplicates.hash, duplicates.paths))
+                        var contents = [Data:String]()
+                        var duplicatesPaths = Set<String>()
+
+                        for path in paths {
+                            if let content = FileManager.default.contents(atPath: path) {
+                                if let alreadyExistedPath = contents[content] {
+                                    duplicatesPaths.insert(alreadyExistedPath)
+                                    duplicatesPaths.insert(path)
+                                } else {
+                                    contents[content] = path
+                                }
+                            }
+                        }
+
+                        return (hash, duplicatesPaths)
                     }
                 }
 
@@ -92,26 +110,6 @@ struct Hunt {
         }
 
         return duplicatesByHash
-    }
-
-    private func handleDuplicates(
-        _ duplicatesByHash: (hash: Int64, paths: [String])
-    ) async -> (hash: Int64, paths: Set<String>){
-        var contents = [Data:String]()
-        var duplicatesPaths = Set<String>()
-
-        for path in duplicatesByHash.paths {
-            if let content = FileManager.default.contents(atPath: path) {
-                if let alreadyExistedPath = contents[content] {
-                    duplicatesPaths.insert(alreadyExistedPath)
-                    duplicatesPaths.insert(path)
-                } else {
-                    contents[content] = path
-                }
-            }
-        }
-
-        return (duplicatesByHash.hash, duplicatesPaths)
     }
 
     private func handlePotentialDuplicate(
@@ -197,3 +195,6 @@ extension [String] {
         }
     }
 }
+// Fallback for macOS/tvOS/watchOS
+// Use cross-platform alternatives
+#endif
