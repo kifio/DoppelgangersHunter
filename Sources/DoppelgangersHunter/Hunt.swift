@@ -1,84 +1,78 @@
 #if os(iOS)
 #else
+import FileType
 import Foundation
+
+public struct Doppelganger: Decodable {
+    public let path: String
+    public let previewable: Bool
+}
+
+public struct Doppelgangers: Decodable {
+    let hash: Int64
+    private(set) public var files: [Doppelganger]
+
+    fileprivate init(hash: Int64, files: [File]) {
+        self.hash = hash
+        self.files = files.map { Doppelganger(path: $0.path, previewable: $0.previewable) }
+    }
+
+    fileprivate mutating func append(file: File) {
+        self.files.append(Doppelganger(path: file.path, previewable: file.previewable))
+    }
+
+    fileprivate mutating func remove(paths: Set<String>) {
+        self.files.removeAll(where: { !paths.contains($0.path)})
+    }
+}
+
+private typealias File = (path: String, hash: Int64, previewable: Bool)
 
 public struct Hunt {
     
     public init() {}
 
-    public struct Duplicates: Decodable {
-        let hash: Int64
-        private(set) public var paths: [String]
-
-        public init(hash: Int64, paths: [String]) {
-            self.hash = hash
-            self.paths = paths
-        }
-
-        mutating func append(path: String) {
-            self.paths.append(path)
-        }
-
-        mutating func remove(paths: Set<String>) {
-            self.paths.removeAll(where: { !paths.contains($0)})
-        }
-    }
-
     @discardableResult
-    public func hunt(url: URL, skipsHiddenFiles: Bool = false, useSQLite: Bool = false) async-> [Duplicates] {
+    public func hunt(url: URL, skipsHiddenFiles: Bool = false) async-> [Doppelgangers] {
         let traverseResult = url.traverse(skipsHiddenFiles: skipsHiddenFiles)
-        var duplicatesByHash: [Duplicates] = []
+        var duplicatesByHash: [Doppelgangers] = []
 
-        _ = await withTaskGroup(of: (path: String, hash: Int64)?.self) { group in
+        _ = await withTaskGroup(of: File?.self) { group in
             for path in traverseResult.paths {
                 group.addTask {
-                    return if let hash = await computeHash(for: path) {
-                        (path: path, hash: hash)
-                    } else { nil }
+                    guard let content = FileManager.default.contents(atPath: path) else {
+                        print("Не удалось прочитать файл \(path)")
+                        return nil
+                    }
+
+                    return (
+                        path: path,
+                        hash: Int64(content.hashValue),
+                        previewable: content.previewable
+                    )
                 }
             }
 
-            var sqliteHashesTable: [String: Int64]? = useSQLite ? [:] : nil
-            var inMemoryHashesTable: [Int64: String]? = useSQLite ? nil : [:]
+            var inMemoryHashesTable = [Int64: File]()
 
-            for await hashWithPath in group {
-                guard let path = hashWithPath?.path, let hash = hashWithPath?.hash else {
-                    continue
-                }
+            for await file in group {
+                guard let file else { continue }
 
-                if useSQLite {
-                    sqliteHashesTable?[path] = hash
-                } else {
-                    if let existedPathWithSameHash = inMemoryHashesTable![hash] {
-                        handlePotentialDuplicate(path, hash, &duplicatesByHash) {
-                            Duplicates(hash: hash, paths: [path, existedPathWithSameHash])
-                        }
+                if let existedFileWithSameHash = inMemoryHashesTable[file.hash] {
+                    if let potentialDuplicatesIndex = duplicatesByHash.firstIndex(where: { $0.hash == file.hash }) {
+                        duplicatesByHash[potentialDuplicatesIndex].append(file: file)
                     } else {
-                        inMemoryHashesTable?[hash] = path
+                        duplicatesByHash.append(Doppelgangers(hash: file.hash, files: [file, existedFileWithSameHash]))
                     }
-                }
-            }
-
-            if
-                let sqliteHashesTable,
-                let databaseHelper = DatabaseHelper(maxPathLength: traverseResult.maxPathLength)
-            {
-                databaseHelper.saveToDatabase(hashesTable: sqliteHashesTable)
-
-                let duplicatesHashesTable = databaseHelper.queryDuplicates()
-                databaseHelper.closeAndDeleteDatabase()
-
-                duplicatesHashesTable.forEach { path, hash in
-                    handlePotentialDuplicate(path, hash, &duplicatesByHash) {
-                        Duplicates(hash: hash, paths: [path])
-                    }
+                } else {
+                    inMemoryHashesTable[file.hash] = file
                 }
             }
 
             _ = await withTaskGroup(of: (Int64, Set<String>).self) { group in
-                for duplicates in duplicatesByHash {
-                    let paths = duplicates.paths
-                    let hash = duplicates.hash
+                for doppelgangers in duplicatesByHash {
+                    let paths = doppelgangers.files.map { $0.path }
+                    let hash = doppelgangers.hash
                     group.addTask {
                         var contents = [Data:String]()
                         var duplicatesPaths = Set<String>()
@@ -101,7 +95,7 @@ public struct Hunt {
                 for await duplicatesPaths in group {
                     if let potentialDuplicatesIndex = duplicatesByHash.firstIndex(where: { $0.hash == duplicatesPaths.0 }) {
                         duplicatesByHash[potentialDuplicatesIndex].remove(paths: duplicatesPaths.1)
-                        if duplicatesByHash[potentialDuplicatesIndex].paths.isEmpty {
+                        if duplicatesByHash[potentialDuplicatesIndex].files.isEmpty {
                             duplicatesByHash.remove(at: potentialDuplicatesIndex)
                         }
                     }
@@ -111,28 +105,6 @@ public struct Hunt {
 
         return duplicatesByHash
     }
-
-    private func handlePotentialDuplicate(
-        _ path: String,
-        _ hash: Int64,
-        _ duplicatesByHash: inout [Duplicates],
-        _ duplicatesListInit: () -> Duplicates
-    ) {
-        if let potentialDuplicatesIndex = duplicatesByHash.firstIndex(where: { $0.hash == hash }) {
-            duplicatesByHash[potentialDuplicatesIndex].append(path: path)
-        } else {
-            duplicatesByHash.append(duplicatesListInit())
-        }
-    }
-}
-
-private func computeHash(for path: String) async -> Int64? {
-    guard let content = FileManager.default.contents(atPath: path) else {
-        print("Не удалось прочитать файл \(path)")
-        return nil
-    }
-
-    return Int64(content.hashValue)
 }
 
 extension URL {
@@ -195,6 +167,17 @@ extension [String] {
         }
     }
 }
-// Fallback for macOS/tvOS/watchOS
-// Use cross-platform alternatives
+
+extension Data {
+    
+    private static let previewableMimePrefixes: Set<String> = ["video", "image"]
+    
+    var previewable: Bool {
+        // "video" или "audio"
+        guard let mimePrefix = FileType.mimeType(data: self)?.mime.prefix(5) else {
+            return false
+        }
+        return Data.previewableMimePrefixes.contains(String(mimePrefix))
+    }
+}
 #endif

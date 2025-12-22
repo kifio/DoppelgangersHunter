@@ -5,7 +5,6 @@
 import ArgumentParser
 import DoppelgangersHunter
 import Foundation
-import SQLite
 
 @main
 struct DoppelgangersHunter: AsyncParsableCommand {
@@ -19,9 +18,6 @@ struct DoppelgangersHunter: AsyncParsableCommand {
     @Flag(help: "Пропускать скрытые файлы")
     var skipsHiddenFiles: Bool = false
 
-    @Flag(name: .customLong("use-sqlite"), help: "Использовать SQLite базу данных")
-    var useSQLite: Bool = false
-
     func run() async {
         guard let url = URL(string: path) else {
             print("Не удалось открыть каталог \(path)")
@@ -30,13 +26,12 @@ struct DoppelgangersHunter: AsyncParsableCommand {
 
         let results = await Hunt().hunt(
             url: url,
-            skipsHiddenFiles: skipsHiddenFiles,
-            useSQLite: useSQLite
+            skipsHiddenFiles: skipsHiddenFiles
         )
 
         results.enumerated().forEach { index, duplicates in
-            duplicates.paths.forEach { path in
-                print(path)
+            duplicates.files.forEach { file in
+                print(file.path)
             }
 
             if index < results.count - 1 {

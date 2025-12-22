@@ -2,21 +2,19 @@
 
 Мне просто хотелось поиграться с:
  - Swift Package Manager;
- - SQLite;
+ ~~- SQLite;~~ удалено
  - Swift for Linux;
  - Swift Testing;
  - а также файловой системой, инлайнами, мутирующими структурами и вайб-кодингом.
 
 ```
-USAGE: doppelgangers-hunter <path> [--delete] [--skips-hidden-files] [--use-sqlite]
+USAGE: doppelgangers-hunter <path> [--skips-hidden-files]
 
 ARGUMENTS:
   <path>                  Путь к каталогу, где надо найти дубликаты
 
 OPTIONS:
-  --delete                Автоматически удалять найденные дубликаты
   --skips-hidden-files    Пропускать скрытые файлы
-  --use-sqlite            Использовать SQLite базу данных
   -h, --help              Show help information.
 ```
 

@@ -21,7 +21,7 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser", from: "1.3.0"),
-        .package(url: "https://github.com/stephencelis/SQLite.swift.git", from: "0.15.4"),
+        .package(url: "https://github.com/jaywcjlove/FileType.git", from: "2.0.1")
     ],
     targets: [
         .executableTarget(
@@ -35,7 +35,7 @@ let package = Package(
         .target(
             name: "DoppelgangersHunter",
             dependencies: [
-                .product(name: "SQLite", package: "SQLite.swift"),
+                .product(name: "FileType", package: "FileType"),
             ],
             path: "Sources/DoppelgangersHunter"
         ),
