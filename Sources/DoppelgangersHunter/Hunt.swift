@@ -3,9 +3,15 @@
 import FileType
 import Foundation
 
+public enum ContentType: UInt8, Decodable, Sendable {
+    case video
+    case image
+    case unpreviewable
+}
+
 public struct Doppelganger: Decodable {
     public let path: String
-    public let previewable: Bool
+    public let contentType: ContentType
 }
 
 public struct Doppelgangers: Decodable {
@@ -14,11 +20,11 @@ public struct Doppelgangers: Decodable {
 
     fileprivate init(hash: Int64, files: [File]) {
         self.hash = hash
-        self.files = files.map { Doppelganger(path: $0.path, previewable: $0.previewable) }
+        self.files = files.map { Doppelganger(path: $0.path, contentType: $0.contentType) }
     }
 
     fileprivate mutating func append(file: File) {
-        self.files.append(Doppelganger(path: file.path, previewable: file.previewable))
+        self.files.append(Doppelganger(path: file.path, contentType: file.contentType))
     }
 
     fileprivate mutating func remove(paths: Set<String>) {
@@ -26,7 +32,7 @@ public struct Doppelgangers: Decodable {
     }
 }
 
-private typealias File = (path: String, hash: Int64, previewable: Bool)
+private typealias File = (path: String, hash: Int64, contentType: ContentType)
 
 public struct Hunt {
     
@@ -40,15 +46,31 @@ public struct Hunt {
         _ = await withTaskGroup(of: File?.self) { group in
             for path in traverseResult.paths {
                 group.addTask {
-                    guard let content = FileManager.default.contents(atPath: path) else {
+                    
+                    var content: Data? = nil
+                    
+                    do {
+                        let fileHandle = try FileHandle(forReadingAtPath: path)
+                        
+                        if #available(macOS 10.15.4, *) {
+                            content = try fileHandle?.read(upToCount: 512)
+                        } else {
+                            content = FileManager.default.contents(atPath: path)
+                        }
+                        try fileHandle?.close()
+                    } catch {
+                        print(error)
+                    }
+                    
+                    guard let content else {
                         print("Не удалось прочитать файл \(path)")
                         return nil
                     }
-
+    
                     return (
                         path: path,
                         hash: Int64(content.hashValue),
-                        previewable: content.previewable
+                        contentType: content.contentType
                     )
                 }
             }
@@ -170,14 +192,20 @@ extension [String] {
 
 extension Data {
     
-    private static let previewableMimePrefixes: Set<String> = ["video", "image"]
-    
-    var previewable: Bool {
-        // "video" или "audio"
-        guard let mimePrefix = FileType.mimeType(data: self)?.mime.prefix(5) else {
-            return false
+    var contentType: ContentType {
+        // "video" или "image"
+        guard let mime = FileType.mimeType(data: self)?.mime else {
+            return .unpreviewable
         }
-        return Data.previewableMimePrefixes.contains(String(mimePrefix))
+        
+        return if mime.starts(with: "image") {
+            .image
+        } else if mime.starts(with: "video") {
+            .video
+        } else {
+            .unpreviewable
+        }
     }
 }
 #endif
+
