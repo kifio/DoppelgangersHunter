@@ -9,7 +9,7 @@ public enum ContentType: UInt8, Decodable, Sendable {
     case unpreviewable
 }
 
-public struct Doppelganger: Decodable {
+public struct Doppelganger: Decodable, Hashable {
     public let path: String
     public let contentType: ContentType
 }
